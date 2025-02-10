@@ -1,8 +1,6 @@
 from app import NewsResearchAssistant
 import openai
 from datetime import datetime
-import json
-import markdown
 from typing import List
 
 class NewsletterAgent:
@@ -10,28 +8,6 @@ class NewsletterAgent:
         self.research_assistant = NewsResearchAssistant(exa_api_key, openai_api_key)
         self.openai_api_key = openai_api_key
         openai.api_key = openai_api_key
-        
-    def _chunk_text(self, text, max_tokens=3000):
-        """Split text into chunks that won't exceed token limit."""
-        words = text.split()
-        chunks = []
-        current_chunk = []
-        current_length = 0
-        
-        for word in words:
-            # Approximate token count (words / 0.75)
-            word_tokens = len(word) / 3
-            if current_length + word_tokens > max_tokens:
-                chunks.append(' '.join(current_chunk))
-                current_chunk = [word]
-                current_length = word_tokens
-            else:
-                current_chunk.append(word)
-                current_length += word_tokens
-                
-        if current_chunk:
-            chunks.append(' '.join(current_chunk))
-        return chunks
 
     def _generate_topic_analysis(self, topic, article_texts):
         """Generate an analytical overview of the topic using GPT."""
@@ -154,3 +130,4 @@ Here's your curated AI research update for today.
             f.write(newsletter_content)
         
         return filename 
+    

@@ -4,7 +4,6 @@ import os
 import json
 from datetime import datetime
 import base64
-from pathlib import Path
 
 # Function to load and encode the image
 def get_base64_encoded_image(image_path):
