@@ -6,6 +6,7 @@ import markdown
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from typing import List
 
 class NewsletterAgent:
     def __init__(self, exa_api_key, openai_api_key):
@@ -13,51 +14,104 @@ class NewsletterAgent:
         self.openai_api_key = openai_api_key
         openai.api_key = openai_api_key
         
-    def generate_newsletter_sections(self, topics):
-        """Generate newsletter content for multiple topics."""
-        newsletter_sections = []
+    def _chunk_text(self, text, max_tokens=3000):
+        """Split text into chunks that won't exceed token limit."""
+        words = text.split()
+        chunks = []
+        current_chunk = []
+        current_length = 0
         
-        for topic in topics:
-            articles = self.research_assistant.research(topic, num_articles=5)
-            
-            # Generate section analysis using GPT
-            article_texts = [f"Title: {a['title']}\nSummary: {a['summary']}" 
-                           for a in articles]
-            
-            analysis = self._generate_topic_analysis(topic, article_texts)
-            
-            newsletter_sections.append({
-                "topic": topic,
-                "analysis": analysis,
-                "articles": articles
-            })
-            
-        return newsletter_sections
-    
+        for word in words:
+            # Approximate token count (words / 0.75)
+            word_tokens = len(word) / 3
+            if current_length + word_tokens > max_tokens:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [word]
+                current_length = word_tokens
+            else:
+                current_chunk.append(word)
+                current_length += word_tokens
+                
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        return chunks
+
     def _generate_topic_analysis(self, topic, article_texts):
         """Generate an analytical overview of the topic using GPT."""
-        combined_text = "\n\n".join(article_texts)
+        # Combine articles but limit the content
+        summaries = []
+        for article in article_texts[:5]:  # Limit to 5 articles
+            # Get a shorter version of each article
+            summary = self._get_brief_summary(article)
+            summaries.append(summary)
+            
+        combined_text = "\n\n".join(summaries)
         
-        prompt = f"""Analyze the following articles about {topic} and provide:
-        1. Key trends and patterns
-        2. Important developments
-        3. Potential implications
-        Make it engaging and insightful for newsletter readers.
+        prompt = f"""Analyze these articles about {topic} and provide:
+        1. Key trends (2-3 sentences)
+        2. Important developments (2-3 points)
+        3. Brief implications (1-2 sentences)
+        Be concise and focused.
         
         Articles:
         {combined_text}
         """
         
-        completion = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are an expert newsletter writer and analyst."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        return completion.choices[0].message.content
+        try:
+            completion = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a concise newsletter writer and analyst."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500  # Limit response length
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            return f"Analysis unavailable: {str(e)}"
+
+    def _get_brief_summary(self, article_text):
+        """Get a very brief summary of an article."""
+        try:
+            completion = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "Summarize this article in 2-3 sentences."},
+                    {"role": "user", "content": article_text[:1000]}  # Only use first 1000 chars
+                ],
+                max_tokens=150
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            return "Summary unavailable"
+
+    def generate_newsletter_sections(self, topics):
+        """Generate newsletter content for multiple topics."""
+        newsletter_sections = []
+        
+        for topic in topics:
+            try:
+                # Limit articles per topic
+                articles = self.research_assistant.research(topic, num_articles=3)
+                
+                # Generate section analysis using GPT
+                article_texts = [f"Title: {a['title']}\nSummary: {a['summary']}" 
+                               for a in articles]
+                
+                analysis = self._generate_topic_analysis(topic, article_texts)
+                
+                newsletter_sections.append({
+                    "topic": topic,
+                    "analysis": analysis,
+                    "articles": articles
+                })
+            except Exception as e:
+                print(f"Error processing topic {topic}: {str(e)}")
+                continue
+            
+        return newsletter_sections
     
-    def format_newsletter(self, sections, template="default"):
+    def format_newsletter(self, sections):
         """Format the newsletter content in markdown."""
         current_date = datetime.now().strftime("%B %d, %Y")
         
@@ -84,15 +138,13 @@ Here's your curated AI research update for today.
             for article in section['articles']:
                 newsletter_md += f"""
 * [{article['title']}]({article['url']})
-  * {article['summary']}
+  * {article['summary'][:200]}...  # Limit summary length
 """
             
             newsletter_md += "\n---\n"
             
         newsletter_md += """
 *This newsletter is generated by AI to help you stay updated with the latest developments.*
-
-To unsubscribe, click [here](#).
 """
         return newsletter_md
     

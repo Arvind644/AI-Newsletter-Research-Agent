@@ -3,25 +3,125 @@ from newsletter_agent import NewsletterAgent
 import os
 import json
 from datetime import datetime
+import base64
+from pathlib import Path
 
-# Page configuration
+# Function to load and encode the image
+def get_base64_encoded_image(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
+
+# Load the logo
+try:
+    logo_path = "public/buildclub-long.png"
+    encoded_logo = get_base64_encoded_image(logo_path)
+    logo_html = f'<img src="data:image/png;base64,{encoded_logo}" style="height: 80px; width: auto;">'
+except Exception as e:
+    st.warning(f"Error loading logo: {str(e)}")
+    logo_html = ""
+
+# Configure page settings
 st.set_page_config(
-    page_title="AI Newsletter Generator",
-    page_icon="📰",
-    layout="wide"
+    page_title="AI Newsletter Research Agent",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Custom CSS for header and footer
 st.markdown("""
     <style>
-    .newsletter-section {
-        padding: 20px;
-        border-radius: 5px;
-        border: 1px solid #ddd;
-        margin: 10px 0;
+    /* Main styles */
+    .main {
+        background-color: white !important;
     }
+    
+    /* Header styles */
+    .header {
+        padding: 1.5rem 1rem;
+        background-color: white;
+        border-bottom: 1px solid #f0f0f0;
+        margin: -6rem -4rem 2rem -4rem;
+    }
+    
+    .header-content {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .header-text {
+        margin-left: 1rem;
+    }
+    
+    .app-title {
+        color: #262730;
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin: 0;
+    }
+    
+    .app-subtitle {
+        color: #666;
+        font-size: 1rem;
+        margin: 0;
+    }
+    
+    /* Footer styles */
+    .footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background-color: white;
+        padding: 1rem;
+        text-align: center;
+        border-top: 1px solid #f0f0f0;
+    }
+    
+    .footer-content {
+        color: #666;
+        font-size: 0.8rem;
+    }
+    
+    /* Hide default Streamlit elements */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
+
+# Header with logo
+st.markdown(f"""
+    <div class="header">
+        <div class="header-content">
+            <div class="header-left">
+                {logo_html}
+                <div class="header-text">
+                    <h1 class="app-title">AI Newsletter Research Agent</h1>
+                    <p class="app-subtitle">Create comprehensive research newsletters automatically</p>
+                </div>
+            </div>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+def load_topics():
+    """Load saved topic configurations."""
+    try:
+        with open("topics.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        st.error("Topics configuration file not found!")
+        return {}
 
 def initialize_agent():
     """Initialize the NewsletterAgent with API keys."""
@@ -30,56 +130,54 @@ def initialize_agent():
     
     return NewsletterAgent(exa_api_key, openai_api_key)
 
-def load_topics():
-    """Load saved topic configurations."""
-    try:
-        with open("topics.json", "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {
-            "AI & Machine Learning": ["Latest AI developments", "Machine learning breakthroughs"],
-            "Technology": ["Quantum computing news", "Blockchain developments"],
-            "Science": ["Space exploration updates", "Climate tech innovations"]
-        }
-
 def main():
-    st.title("📰 AI Newsletter Generator")
+    # Load topics configuration
+    topics_config = load_topics()
+    
+    # Remove the duplicate title since it's already in the header
     st.markdown("Generate comprehensive AI research newsletters automatically.")
     
-    # Sidebar for configuration
+    # Sidebar settings
     with st.sidebar:
-        st.header("Newsletter Settings")
+        st.markdown("### Newsletter Settings")
         
-        # Topic Management
-        st.subheader("Topic Categories")
-        topics = load_topics()
-        
-        selected_categories = st.multiselect(
-            "Select categories to include:",
-            options=list(topics.keys()),
-            default=list(topics.keys())[:2]
+        # Custom Search Input
+        st.markdown("#### Custom Search")
+        custom_search = st.text_input(
+            "Enter custom search terms",
+            placeholder="e.g., Large Language Models, Computer Vision",
+            help="Enter specific topics or keywords you want to research"
         )
         
-        # Collect all selected topics
+        # Add a divider
+        st.markdown("---")
+        
+        # Topic Categories from topics.json
+        st.markdown("#### Topic Categories")
+        st.markdown("Select categories and subtopics:")
+        
         selected_topics = []
-        for category in selected_categories:
-            selected_topics.extend(topics[category])
+        
+        # Add custom search terms if provided
+        if custom_search:
+            custom_topics = [topic.strip() for topic in custom_search.split(",")]
+            selected_topics.extend(custom_topics)
+        
+        # Create expandable sections for each main category
+        for category, subtopics in topics_config.items():
+            with st.expander(category):
+                if st.checkbox(f"Select all {category}", key=f"all_{category}"):
+                    selected_topics.extend(subtopics)
+                else:
+                    for subtopic in subtopics:
+                        if st.checkbox(subtopic, key=subtopic):
+                            selected_topics.append(subtopic)
         
         # Email Settings
-        st.subheader("Email Settings")
+        st.markdown("#### Email Settings")
         enable_email = st.checkbox("Enable email delivery")
-        
-        if enable_email:
-            email_config = {
-                "smtp_server": st.text_input("SMTP Server", "smtp.gmail.com"),
-                "smtp_port": st.number_input("SMTP Port", value=465),
-                "username": st.text_input("Email Username"),
-                "password": st.text_input("Email Password", type="password"),
-                "from_email": st.text_input("From Email"),
-                "to_email": st.text_input("To Email")
-            }
     
-    # Main interface
+    # Main content area
     if st.button("Generate Newsletter", type="primary"):
         if selected_topics:
             try:
@@ -93,35 +191,69 @@ def main():
                     # Save newsletter
                     filename = agent.save_newsletter(newsletter_content)
                     
-                    # Display preview
+                    # Display success message
                     st.success(f"Newsletter generated successfully! Saved as {filename}")
+                    
+                    # Show selected topics
+                    st.markdown("### Selected Topics for Research")
+                    for topic in selected_topics:
+                        st.markdown(f"- {topic}")
                     
                     # Show preview
                     st.markdown("### Newsletter Preview")
                     st.markdown(newsletter_content)
                     
-                    # Download option
-                    st.download_button(
-                        label="Download Newsletter",
-                        data=newsletter_content,
-                        file_name=filename,
-                        mime="text/markdown"
-                    )
+                    # Download buttons
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.download_button(
+                            "📥 Download as PDF",
+                            data=newsletter_content,
+                            file_name=filename.replace('.md', '.pdf'),
+                            mime="application/pdf",
+                            help="Download the newsletter in PDF format"
+                        )
+                    with col2:
+                        st.download_button(
+                            "📝 Download as Markdown",
+                            data=newsletter_content,
+                            file_name=filename,
+                            mime="text/markdown",
+                            help="Download the newsletter in Markdown format"
+                        )
                     
                     # Send email if enabled
                     if enable_email:
                         with st.spinner("📧 Sending newsletter via email..."):
+                            # You'll need to configure email settings
+                            email_config = {
+                                'smtp_server': 'smtp.example.com',
+                                'smtp_port': 465,
+                                'username': 'your_email@example.com',
+                                'password': 'your_password',
+                                'from_email': 'your_email@example.com',
+                                'to_email': 'recipient@example.com'
+                            }
                             agent.send_newsletter(newsletter_content, email_config)
                             st.success("Newsletter sent successfully via email!")
                     
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
         else:
-            st.warning("Please select at least one topic category.")
+            st.warning("Please enter custom search terms or select topics from the categories.")
     
     # Footer
     st.markdown("---")
     st.markdown("Powered by Exa AI and OpenAI")
 
+# Footer
+st.markdown("""
+    <div class="footer">
+        <div class="footer-content">
+            © 2024 <a href="https://buildclub.ai"> Build Club </a> | AI Newsletter Research Agent
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
 if __name__ == "__main__":
-    main() 
+    main()
