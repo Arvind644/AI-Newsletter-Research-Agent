@@ -172,10 +172,6 @@ def main():
                     for subtopic in subtopics:
                         if st.checkbox(subtopic, key=subtopic):
                             selected_topics.append(subtopic)
-        
-        # Email Settings
-        st.markdown("#### Email Settings")
-        enable_email = st.checkbox("Enable email delivery")
     
     # Main content area
     if st.button("Generate Newsletter", type="primary"):
@@ -221,21 +217,6 @@ def main():
                             mime="text/markdown",
                             help="Download the newsletter in Markdown format"
                         )
-                    
-                    # Send email if enabled
-                    if enable_email:
-                        with st.spinner("📧 Sending newsletter via email..."):
-                            # You'll need to configure email settings
-                            email_config = {
-                                'smtp_server': 'smtp.example.com',
-                                'smtp_port': 465,
-                                'username': 'your_email@example.com',
-                                'password': 'your_password',
-                                'from_email': 'your_email@example.com',
-                                'to_email': 'recipient@example.com'
-                            }
-                            agent.send_newsletter(newsletter_content, email_config)
-                            st.success("Newsletter sent successfully via email!")
                     
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
